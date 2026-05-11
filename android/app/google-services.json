@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "220576378125",
+    "project_id": "moualeu-databse",
+    "storage_bucket": "moualeu-databse.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:220576378125:android:3d33fdbca0df23429e5444",
+        "android_client_info": {
+          "package_name": "com.example.moualeu"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDJjReBclGF0nl13fEkXNziB6tss48QXMs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
