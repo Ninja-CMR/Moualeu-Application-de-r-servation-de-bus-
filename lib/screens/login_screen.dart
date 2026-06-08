@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'signup_screen.dart';
 import 'home_screen.dart';
+import 'admin/admin_login_screen.dart';
+import 'admin/add_trip_screen.dart';
+import 'admin/admin_dashboard.dart';
 import '../services/auth_service.dart';
+import '../models/user_model.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -33,17 +37,29 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
 
     try {
-      await _authService.signIn(
+      UserCredential? userCredential = await _authService.signIn(
         _emailController.text.trim(),
         _passwordController.text,
       );
+      
+      if (userCredential == null || userCredential.user == null) return;
+
+      UserModel? user = await _authService.getUserData(userCredential.user!.uid);
 
       if (mounted) {
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (context) => const HomeScreen()),
-          (route) => false,
-        );
+        if (user != null && user.role == 'admin') {
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (context) => const AdminDashboard()),
+            (route) => false,
+          );
+        } else {
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (context) => const HomeScreen()),
+            (route) => false,
+          );
+        }
       }
     } on FirebaseAuthException catch (e) {
       String message = "Une erreur est survenue";
@@ -261,6 +277,19 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ],
                       ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const AdminLoginScreen()),
+                      );
+                    },
+                    child: Text(
+                      "Accès Administrateur",
+                      style: TextStyle(color: Colors.blueGrey.shade700, fontSize: 12),
                     ),
                   ),
                 ],

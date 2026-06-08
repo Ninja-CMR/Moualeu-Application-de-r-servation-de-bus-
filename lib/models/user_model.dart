@@ -5,6 +5,7 @@ class UserModel {
   final String fullName;
   final String email;
   final String phone;
+  final String role; // 'admin' or 'user'
   final DateTime? createdAt;
 
   UserModel({
@@ -12,6 +13,7 @@ class UserModel {
     required this.fullName,
     required this.email,
     required this.phone,
+    this.role = 'user',
     this.createdAt,
   });
 
@@ -21,6 +23,7 @@ class UserModel {
       'fullName': fullName,
       'email': email,
       'phone': phone,
+      'role': role,
       'createdAt': createdAt != null ? Timestamp.fromDate(createdAt!) : FieldValue.serverTimestamp(),
     };
   }
@@ -31,6 +34,7 @@ class UserModel {
       fullName: map['fullName'] ?? '',
       email: map['email'] ?? '',
       phone: map['phone'] ?? '',
+      role: map['role'] ?? 'user',
       createdAt: map['createdAt'] != null ? (map['createdAt'] as Timestamp).toDate() : null,
     );
   }

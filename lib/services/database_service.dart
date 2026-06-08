@@ -1,10 +1,25 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../models/agency_model.dart';
 import '../models/trajet_model.dart';
 
 class DatabaseService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  // Create a new trip (trajet)
+  // --- Admin Methods ---
+
+  // Add a new agency
+  Future<void> addAgency(AgencyModel agency) async {
+    await _db.collection('agencies').doc(agency.id).set(agency.toMap());
+  }
+
+  // Get all agencies
+  Stream<List<AgencyModel>> get agencies {
+    return _db.collection('agencies').snapshots().map((snapshot) {
+      return snapshot.docs.map((doc) => AgencyModel.fromMap(doc.id, doc.data())).toList();
+    });
+  }
+
+  // Create a new trip (admin only)
   Future<void> createTrajet(TrajetModel trajet) async {
     try {
       await _db.collection('trajets').add(trajet.toMap());
@@ -14,32 +29,74 @@ class DatabaseService {
     }
   }
 
-  // Get all trips
-  Stream<List<TrajetModel>> get trajets {
-    return _db.collection('trajets').snapshots().map((snapshot) {
+  // --- User Methods ---
+
+  // Search trips with filters
+  Stream<List<TrajetModel>> searchTrips({
+    String? departure,
+    String? destination,
+    double? maxPrice,
+  }) {
+    Query query = _db.collection('trajets');
+
+    if (departure != null && departure.isNotEmpty) {
+      query = query.where('departure', isEqualTo: departure);
+    }
+    if (destination != null && destination.isNotEmpty) {
+      query = query.where('destination', isEqualTo: destination);
+    }
+    if (maxPrice != null) {
+      query = query.where('price', isLessThanOrEqualTo: maxPrice);
+    }
+
+    return query.snapshots().map((snapshot) {
       return snapshot.docs.map((doc) {
-        return TrajetModel.fromMap(doc.id, doc.data());
+        return TrajetModel.fromMap(doc.id, doc.data() as Map<String, dynamic>);
       }).toList();
     });
   }
 
-  // Create a reservation (MVP: just adding to a collection or linking user to trip)
-  // For now, let's keep it simple: a collection 'reservations'
+  // Transactional Reservation
   Future<void> createReservation({
     required String uid,
     required String trajetId,
-    required DateTime reservationDate,
+    required int seatNumber,
   }) async {
-    try {
-      await _db.collection('reservations').add({
-        'uid': uid,
+    return _db.runTransaction((transaction) async {
+      DocumentReference trajetRef = _db.collection('trajets').doc(trajetId);
+      DocumentSnapshot trajetSnapshot = await transaction.get(trajetRef);
+
+      if (!trajetSnapshot.exists) {
+        throw Exception("Le trajet n'existe pas");
+      }
+
+      int availableSeats = trajetSnapshot['availableSeats'] ?? 0;
+
+      if (availableSeats <= 0) {
+        throw Exception("Plus de places disponibles");
+      }
+
+      // 1. Update available seats
+      transaction.update(trajetRef, {'availableSeats': availableSeats - 1});
+
+      // 2. Create reservation document
+      DocumentReference reservationRef = _db.collection('reservations').doc();
+      transaction.set(reservationRef, {
+        'userId': uid,
         'trajetId': trajetId,
-        'reservationDate': Timestamp.fromDate(reservationDate),
+        'seatNumber': seatNumber,
         'status': 'confirmed',
+        'timestamp': FieldValue.serverTimestamp(),
       });
-    } catch (e) {
-      print("Error creating reservation: $e");
-      rethrow;
-    }
+    });
+  }
+
+  // Get all trips
+  Stream<List<TrajetModel>> get trajets {
+    return _db.collection('trajets').snapshots().map((snapshot) {
+      return snapshot.docs.map((doc) {
+        return TrajetModel.fromMap(doc.id, doc.data() as Map<String, dynamic>);
+      }).toList();
+    });
   }
 }

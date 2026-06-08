@@ -15,6 +15,7 @@ class AuthService {
     required String password,
     required String fullName,
     required String phone,
+    String role = 'user', // Added role parameter
   }) async {
     try {
       UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
@@ -29,6 +30,7 @@ class AuthService {
           fullName: fullName,
           email: email,
           phone: phone,
+          role: role, // Pass the role
           createdAt: DateTime.now(),
         );
 
@@ -70,6 +72,20 @@ class AuthService {
       return null;
     } catch (e) {
       print("Error fetching user details: $e");
+      return null;
+    }
+  }
+
+  // Get user data by UID
+  Future<UserModel?> getUserData(String uid) async {
+    try {
+      DocumentSnapshot doc = await _db.collection('users').doc(uid).get();
+      if (doc.exists) {
+        return UserModel.fromMap(doc.data() as Map<String, dynamic>);
+      }
+      return null;
+    } catch (e) {
+      print("Error fetching user data: $e");
       return null;
     }
   }

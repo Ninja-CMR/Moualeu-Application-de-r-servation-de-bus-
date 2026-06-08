@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../services/database_service.dart';
 import '../models/user_model.dart';
+import '../models/trajet_model.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'login_screen.dart';
 
@@ -18,10 +19,17 @@ class _HomeScreenState extends State<HomeScreen> {
   UserModel? _currentUser;
   bool _isLoading = true;
 
+  final TextEditingController _departureController = TextEditingController();
+  final TextEditingController _destinationController = TextEditingController();
+  final TextEditingController _priceController = TextEditingController();
+
+  Stream<List<TrajetModel>>? _tripsStream;
+
   @override
   void initState() {
     super.initState();
     _loadUserInfo();
+    _searchTrips(); // Load default or empty search
   }
 
   void _loadUserInfo() async {
@@ -33,35 +41,42 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void _handleReservation() async {
+  void _searchTrips() {
+    setState(() {
+      _tripsStream = _dbService.searchTrips(
+        departure: _departureController.text.trim(),
+        destination: _destinationController.text.trim(),
+        maxPrice: double.tryParse(_priceController.text),
+      );
+    });
+  }
+
+  void _bookTrip(TrajetModel trajet) async {
     if (_currentUser == null) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Traitement de votre réservation...")),
-    );
+    setState(() => _isLoading = true);
 
     try {
-      // Pour le MVP, on crée un trajet fictif s'il n'en existe pas ou on réserve un trajet par défaut
+      // Pour cet exemple, on attribue le siège numéro 1 (ou basé sur availableSeats)
       await _dbService.createReservation(
         uid: _currentUser!.uid,
-        trajetId: "trajet_mvp_default", // ID fictif pour le MVP
-        reservationDate: DateTime.now(),
+        trajetId: trajet.id,
+        seatNumber: trajet.totalSeats - trajet.availableSeats + 1,
       );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Réservation réussie !"),
-            backgroundColor: Colors.green,
-          ),
+          const SnackBar(content: Text("Réservation réussie !"), backgroundColor: Colors.green),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Erreur lors de la réservation: ${e.toString()}")),
+          SnackBar(content: Text("Erreur: ${e.toString()}")),
         );
       }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -103,31 +118,34 @@ class _HomeScreenState extends State<HomeScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const SizedBox(height: 20),
-                      const Text(
-                        'BIENVENUE',
-                        style: TextStyle(
-                          color: Color(0xFFBCAAA4), // Soft Gold/Brown
+                      Text(
+                        'BIENVENUE ${_currentUser?.fullName.toUpperCase() ?? ""}',
+                        style: const TextStyle(
+                          color: Color(0xFFBCAAA4),
                           fontWeight: FontWeight.bold,
                           fontSize: 14,
                           letterSpacing: 1.2,
                         ),
                       ),
                       const SizedBox(height: 8),
-                      Text(
-                        'Voyagez depuis\nvotre quartier',
+                      const Text(
+                        'Où allez-vous\naujourd\'hui ?',
                         style: TextStyle(
-                          color: const Color(0xFF0D47A1), // Deep Blue
+                          color: Color(0xFF0D47A1),
                           fontWeight: FontWeight.bold,
                           fontSize: 34,
                           height: 1.1,
                         ),
                       ),
                       const SizedBox(height: 25),
-                      _buildMainIllustration(),
-                      const SizedBox(height: 35),
-                      _buildActionButtons(),
-                      const SizedBox(height: 35),
-                      _buildInfoCards(),
+                      _buildSearchForm(),
+                      const SizedBox(height: 25),
+                      const Text(
+                        "Trajets disponibles",
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 15),
+                      _buildTripsList(),
                       const SizedBox(height: 30),
                     ],
                   ),
@@ -138,6 +156,86 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
       bottomNavigationBar: _buildBottomNavBar(),
+    );
+  }
+
+  Widget _buildSearchForm() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
+      ),
+      child: Column(
+        children: [
+          TextField(
+            controller: _departureController,
+            decoration: const InputDecoration(hintText: "Départ", prefixIcon: Icon(Icons.location_on_outlined)),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _destinationController,
+            decoration: const InputDecoration(hintText: "Arrivée", prefixIcon: Icon(Icons.location_on)),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _priceController,
+            decoration: const InputDecoration(hintText: "Prix Max", prefixIcon: Icon(Icons.money)),
+            keyboardType: TextInputType.number,
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: _searchTrips,
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0D47A1)),
+              child: const Text("Rechercher", style: TextStyle(color: Colors.white)),
+            ),
+          )
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTripsList() {
+    return StreamBuilder<List<TrajetModel>>(
+      stream: _tripsStream,
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+        final trips = snapshot.data!;
+        if (trips.isEmpty) return const Text("Aucun trajet trouvé.");
+
+        return ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: trips.length,
+          itemBuilder: (context, index) {
+            final trip = trips[index];
+            return Card(
+              margin: const EdgeInsets.only(bottom: 15),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+              child: ListTile(
+                leading: const Icon(Icons.directions_bus, size: 40, color: Color(0xFF0D47A1)),
+                title: Text("${trip.departure} -> ${trip.destination}"),
+                subtitle: Text("${trip.agencyName} - ${trip.availableSeats} places libres"),
+                trailing: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text("${trip.price} FCFA", style: const TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    ElevatedButton(
+                      onPressed: () => _bookTrip(trip),
+                      style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0)),
+                      child: const Text("Réserver", style: TextStyle(fontSize: 12)),
+                    )
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -167,184 +265,6 @@ class _HomeScreenState extends State<HomeScreen> {
               radius: 20,
               backgroundImage: const NetworkImage('https://i.pravatar.cc/150?img=11'),
               child: _isLoading ? const CircularProgressIndicator(strokeWidth: 2) : null,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMainIllustration() {
-    return Center(
-      child: Container(
-        height: 280,
-        width: double.infinity,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(20),
-          child: Image.asset(
-            'assets/homeImage.png',
-            fit: BoxFit.contain,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildActionButtons() {
-    return Column(
-      children: [
-        _buildButton(
-          text: 'Réserver un trajet',
-          iconPath: 'assets/icon/reservationIcon.png',
-          color: const Color(0xFF1565C0), // Primary Blue
-          textColor: Colors.white,
-          isFilled: true,
-          onTap: _handleReservation,
-        ),
-        const SizedBox(height: 16),
-        _buildButton(
-          text: 'Voir mes réservations',
-          iconPath: 'assets/icon/voirreservations.png',
-          color: const Color(0xFFECEFF1), // Light Blue Grey
-          textColor: const Color(0xFF1565C0),
-          isFilled: false,
-          onTap: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text("Bientôt disponible dans la prochaine version")),
-            );
-          },
-        ),
-      ],
-    );
-  }
-
-  Widget _buildButton({
-    required String text,
-    required String iconPath,
-    required Color color,
-    required Color textColor,
-    required bool isFilled,
-    required VoidCallback onTap,
-  }) {
-    return Container(
-      width: double.infinity,
-      height: 65,
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(35),
-        boxShadow: isFilled
-            ? [
-                BoxShadow(
-                  color: color.withOpacity(0.3),
-                  blurRadius: 12,
-                  offset: const Offset(0, 6),
-                )
-              ]
-            : [],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(35),
-          onTap: onTap,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Image.asset(
-                iconPath,
-                height: 22,
-                color: textColor,
-              ),
-              const SizedBox(width: 12),
-              Text(
-                text,
-                style: TextStyle(
-                  color: textColor,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 17,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildInfoCards() {
-    return Row(
-      children: [
-        Expanded(
-          child: _buildInfoCard(
-            title: 'STATUS',
-            value: 'Actif',
-            icon: Icons.bolt,
-            iconColor: Colors.orange.shade400,
-          ),
-        ),
-        const SizedBox(width: 20),
-        Expanded(
-          child: _buildInfoCard(
-            title: 'POINTS',
-            value: '1,240',
-            icon: Icons.stars,
-            iconColor: const Color(0xFF1565C0),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildInfoCard({
-    required String title,
-    required String value,
-    required IconData icon,
-    required Color iconColor,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 25),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(30),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: iconColor.withOpacity(0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: iconColor, size: 24),
-          ),
-          const SizedBox(height: 15),
-          Text(
-            title,
-            style: TextStyle(
-              color: Colors.grey.shade500,
-              fontSize: 12,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 1.1,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            value,
-            style: const TextStyle(
-              color: Colors.black87,
-              fontSize: 20,
-              fontWeight: FontWeight.w900,
             ),
           ),
         ],
