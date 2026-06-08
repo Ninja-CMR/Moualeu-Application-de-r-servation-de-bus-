@@ -9,7 +9,36 @@ class AuthService {
   // Stream of auth state changes
   Stream<User?> get user => _auth.authStateChanges();
 
-  // Sign up with Email and Password
+  // --- Phone Auth Methods ---
+
+  // 1. Verify Phone Number
+  Future<void> verifyPhone({
+    required String phoneNumber,
+    required Function(String verificationId, int? resendToken) onCodeSent,
+    required Function(FirebaseAuthException e) onVerificationFailed,
+    required Function(PhoneAuthCredential credential) onVerificationCompleted,
+  }) async {
+    await _auth.verifyPhoneNumber(
+      phoneNumber: phoneNumber,
+      verificationCompleted: onVerificationCompleted,
+      verificationFailed: onVerificationFailed,
+      codeSent: onCodeSent,
+      codeAutoRetrievalTimeout: (String verificationId) {},
+      timeout: const Duration(seconds: 60),
+    );
+  }
+
+  // 2. Sign In with OTP Credential
+  Future<UserCredential> signInWithCredential(PhoneAuthCredential credential) async {
+    try {
+      return await _auth.signInWithCredential(credential);
+    } catch (e) {
+      print("Error signing in with phone: $e");
+      rethrow;
+    }
+  }
+
+  // --- Email/Password Auth Methods ---
   Future<UserCredential?> signUp({
     required String email,
     required String password,

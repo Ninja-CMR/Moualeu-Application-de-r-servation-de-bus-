@@ -5,6 +5,8 @@ import 'login_screen.dart';
 import '../services/auth_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import 'package:intl_phone_field/intl_phone_field.dart';
+
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
 
@@ -17,6 +19,7 @@ class _SignupScreenState extends State<SignupScreen> {
   final TextEditingController _fullNameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
+  String _completePhoneNumber = "";
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
   
@@ -48,33 +51,73 @@ class _SignupScreenState extends State<SignupScreen> {
     setState(() => _isLoading = true);
 
     try {
-      await _authService.signUp(
-        email: _emailController.text.trim(),
-        password: _passwordController.text,
-        fullName: _fullNameController.text.trim(),
-        phone: _phoneController.text.trim(),
+      // Pour l'authentification par SMS, on vérifie d'abord le numéro
+      await _authService.verifyPhone(
+        phoneNumber: _completePhoneNumber,
+        onCodeSent: (verificationId, resendToken) {
+          setState(() => _isLoading = false);
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => VerificationScreen(
+                verificationId: verificationId,
+                fullName: _fullNameController.text.trim(),
+                email: _emailController.text.trim(),
+                phone: _completePhoneNumber,
+                password: _passwordController.text,
+              ),
+            ),
+          );
+        },
+        onVerificationFailed: (e) {
+          setState(() => _isLoading = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Échec de la vérification: ${e.message}")),
+          );
+        },
+        onVerificationCompleted: (credential) async {
+          // Auto-retrieval (Android uniquement)
+          await _authService.signInWithCredential(credential);
+          if (mounted) {
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(builder: (context) => const HomeScreen()),
+              (route) => false,
+            );
+          }
+        },
       );
-
-      if (mounted) {
-        // Rediriger vers l'écran de vérification
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const VerificationScreen()),
-        );
-      }
-    } on FirebaseAuthException catch (e) {
-      String message = "Une erreur est survenue";
-      if (e.code == 'email-already-in-use') {
-        message = "Cet e-mail est déjà utilisé";
-      } else if (e.code == 'weak-password') {
-        message = "Le mot de passe est trop faible";
-      }
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
     } catch (e) {
+      setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Erreur: ${e.toString()}")));
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  Widget _buildPhoneField() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16.0),
+      child: IntlPhoneField(
+        decoration: InputDecoration(
+          filled: true,
+          fillColor: Colors.white.withOpacity(0.4),
+          hintText: 'Numéro de téléphone',
+          hintStyle: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide.none,
+          ),
+          contentPadding: const EdgeInsets.symmetric(vertical: 16),
+        ),
+        initialCountryCode: 'CM',
+        onChanged: (phone) {
+          _completePhoneNumber = phone.completeNumber;
+        },
+        validator: (phone) {
+          if (phone == null || phone.number.isEmpty) return 'Veuillez entrer votre numéro';
+          return null;
+        },
+      ),
+    );
   }
 
   Widget _buildTextField({
@@ -95,8 +138,6 @@ class _SignupScreenState extends State<SignupScreen> {
       controller = _fullNameController;
     } else if (hint == 'Adresse e-mail') {
       controller = _emailController;
-    } else if (hint == 'Numéro de téléphone') {
-      controller = _phoneController;
     }
 
     return Padding(
@@ -226,15 +267,7 @@ class _SignupScreenState extends State<SignupScreen> {
                       return null;
                     },
                   ),
-                  _buildTextField(
-                    hint: 'Numéro de téléphone',
-                    icon: Icons.phone_outlined,
-                    keyboardType: TextInputType.phone,
-                    validator: (val) {
-                      if (val == null || val.trim().isEmpty) return 'Veuillez entrer votre numéro';
-                      return null;
-                    },
-                  ),
+                  _buildPhoneField(),
                   _buildTextField(
                     hint: 'Mot de passe',
                     icon: Icons.lock_outline,

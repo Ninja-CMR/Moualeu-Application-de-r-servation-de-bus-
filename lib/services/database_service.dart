@@ -99,4 +99,39 @@ class DatabaseService {
       }).toList();
     });
   }
+
+  // --- Initialization / Seeding ---
+
+  // Helper to initialize the database with some sample data
+  Future<void> initializeDatabase() async {
+    try {
+      // 1. Create a sample agency
+      String agencyId = _db.collection('agencies').doc().id;
+      AgencyModel sampleAgency = AgencyModel(
+        id: agencyId,
+        name: "Moualeu Express",
+        logoUrl: "https://example.com/logo.png",
+      );
+      await addAgency(sampleAgency);
+
+      // 2. Create a sample trip
+      TrajetModel sampleTrajet = TrajetModel(
+        id: '', 
+        departure: "Douala",
+        destination: "Yaoundé",
+        departureTime: DateTime.now().add(const Duration(days: 1)),
+        price: 5000.0,
+        totalSeats: 70,
+        availableSeats: 70,
+        agencyId: agencyId,
+        agencyName: sampleAgency.name,
+      );
+      await createTrajet(sampleTrajet);
+      
+      print("Database initialized successfully");
+    } catch (e) {
+      print("Error initializing database: $e");
+      rethrow;
+    }
+  }
 }

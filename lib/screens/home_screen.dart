@@ -5,6 +5,7 @@ import '../models/user_model.dart';
 import '../models/trajet_model.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'login_screen.dart';
+import '../utils/constants.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -159,6 +160,8 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+
+
   Widget _buildSearchForm() {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -169,15 +172,9 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       child: Column(
         children: [
-          TextField(
-            controller: _departureController,
-            decoration: const InputDecoration(hintText: "Départ", prefixIcon: Icon(Icons.location_on_outlined)),
-          ),
+          _buildCityAutocomplete(_departureController, "Départ", Icons.location_on_outlined),
           const SizedBox(height: 10),
-          TextField(
-            controller: _destinationController,
-            decoration: const InputDecoration(hintText: "Arrivée", prefixIcon: Icon(Icons.location_on)),
-          ),
+          _buildCityAutocomplete(_destinationController, "Arrivée", Icons.location_on),
           const SizedBox(height: 10),
           TextField(
             controller: _priceController,
@@ -195,6 +192,39 @@ class _HomeScreenState extends State<HomeScreen> {
           )
         ],
       ),
+    );
+  }
+
+  Widget _buildCityAutocomplete(TextEditingController controller, String hint, IconData icon) {
+    return Autocomplete<String>(
+      optionsBuilder: (TextEditingValue textEditingValue) {
+        if (textEditingValue.text == '') {
+          return const Iterable<String>.empty();
+        }
+        return AppConstants.cameroonCities.where((String option) {
+          return option.toLowerCase().contains(textEditingValue.text.toLowerCase());
+        });
+      },
+      onSelected: (String selection) {
+        controller.text = selection;
+      },
+      fieldViewBuilder: (context, textController, focusNode, onFieldSubmitted) {
+        // Synchronize our controller with the Autocomplete internal controller
+        textController.text = controller.text;
+        textController.addListener(() {
+          controller.text = textController.text;
+        });
+        
+        return TextField(
+          controller: textController,
+          focusNode: focusNode,
+          onSubmitted: (value) => onFieldSubmitted(),
+          decoration: InputDecoration(
+            hintText: hint,
+            prefixIcon: Icon(icon),
+          ),
+        );
+      },
     );
   }
 
